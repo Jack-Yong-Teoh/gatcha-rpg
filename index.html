@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Astral Gacha: Elemental Legends</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Cinzel:wght@700;900&display=swap');
+        
+        /* --- CORE --- */
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #020617; 
+            overflow: hidden; 
+            touch-action: none; 
+            user-select: none; 
+            -webkit-user-select: none; 
+        }
+        .font-rpg { font-family: 'Cinzel', serif; }
+
+        /* --- LOADING SCREEN --- */
+        .loading-overlay {
+            position: fixed; inset: 0; z-index: 100;
+            background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.8s ease-out;
+        }
+        .loader-bar-bg {
+            width: 300px; height: 4px; background: #1e293b; border-radius: 2px; overflow: hidden; margin-top: 20px;
+        }
+        .loader-bar-fill {
+            height: 100%; background: linear-gradient(90deg, #4f46e5, #ec4899);
+            box-shadow: 0 0 10px #818cf8;
+            transition: width 0.1s linear;
+        }
+        .fade-out { opacity: 0; pointer-events: none; }
+
+        /* --- RARITY BORDERS --- */
+        .rarity-3 { border-color: #3b82f6; box-shadow: 0 0 5px #3b82f6; } 
+        .rarity-4 { border-color: #a855f7; box-shadow: 0 0 10px #a855f7; } 
+        .rarity-5 { 
+            position: relative;
+            border: 2px solid #fbbf24;
+            box-shadow: 0 0 15px #f59e0b, inset 0 0 10px #f59e0b;
+            z-index: 1;
+        }
+        .rarity-5::before {
+            content: ''; position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px;
+            background: linear-gradient(45deg, #fbbf24, transparent, #fff, transparent, #fbbf24);
+            background-size: 400% 400%;
+            z-index: -1;
+            animation: electric-crawl 1.5s linear infinite;
+        }
+        @keyframes electric-crawl { 0% { background-position: 0% 50%; } 100% { background-position: 100% 50%; } }
+
+        /* --- UI ANIMATIONS --- */
+        .animate-reveal { animation: reveal 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        @keyframes reveal { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+
+        /* =========================================
+           ELEMENTAL VFX ENGINE 
+           ========================================= */
+        .vfx-layer {
+            position: absolute; inset: 0; pointer-events: none; z-index: 50; 
+            display: flex; align-items: center; justify-content: center; overflow: hidden;
+        }
+
+        /* 1. SERAPHINA: BLUE THUNDER */
+        .effect-thunder { width: 100%; height: 100%; background: rgba(59, 130, 246, 0.3); animation: flash-blue 0.8s ease-out forwards; position: relative; }
+        .effect-thunder::after { content: ''; position: absolute; top: -20%; left: 50%; width: 200px; height: 150%; background: linear-gradient(to bottom, #fff, #60a5fa, #2563eb); box-shadow: 0 0 100px 50px #3b82f6; transform: translateX(-50%) skewX(-10deg) scaleY(1); animation: thunder-strike 0.3s cubic-bezier(0.1, 0.8, 0.1, 1) forwards; }
+        @keyframes flash-blue { 0% { opacity: 0; } 10% { opacity: 1; background: rgba(59, 130, 246, 0.6); } 100% { opacity: 0; } }
+        @keyframes thunder-strike { 0% { transform: translateX(-50%) skewX(-10deg) scaleY(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateX(-50%) skewX(-10deg) scaleY(1.2); opacity: 0; } }
+
+        /* 2. MIKO: PINK SAKURA */
+        .effect-sakura { width: 100%; height: 100%; background: rgba(236, 72, 153, 0.3); animation: flash-pink 1.2s ease-out forwards; position: relative; display: flex; justify-content: center; align-items: center; }
+        .effect-sakura::before { content: '🌸'; font-size: 300px; position: absolute; text-shadow: 0 0 100px #db2777; color: #fbcfe8; animation: spin-flower 1s ease-out forwards; }
+        @keyframes flash-pink { 0% { opacity: 0; } 10% { opacity: 1; background: rgba(236, 72, 153, 0.6); } 100% { opacity: 0; } }
+        @keyframes spin-flower { 0% { transform: scale(0) rotate(0deg); opacity: 0; } 50% { opacity: 1; transform: scale(1.5) rotate(180deg); } 100% { transform: scale(3) rotate(360deg); opacity: 0; } }
+
+        /* 3. DRAGON: RED INFERNO */
+        .effect-inferno { width: 100%; height: 100%; background: linear-gradient(to top, rgba(220, 38, 38, 0.8), transparent); animation: rise-fire 1.0s ease-out forwards; }
+        @keyframes rise-fire { 0% { transform: translateY(100%); opacity: 0; } 20% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; } }
+
+        /* 4. SAINTESS LIVIA: GREEN NATURE */
+        .effect-life { width: 100%; height: 100%; box-shadow: inset 0 0 150px 50px #22c55e; animation: pulse-life 1.5s ease-out forwards; display: flex; justify-content: center; align-items: center; }
+        .effect-life::after { content: '✚'; font-size: 250px; color: #86efac; text-shadow: 0 0 50px #16a34a; animation: float-cross 1s ease-out forwards; }
+        @keyframes pulse-life { 0% { opacity: 0; } 20% { opacity: 1; background: rgba(34, 197, 94, 0.4); } 100% { opacity: 0; } }
+        @keyframes float-cross { 0% { transform: translateY(50px) scale(0.5); opacity: 0; } 40% { opacity: 1; } 100% { transform: translateY(-100px) scale(1.5); opacity: 0; } }
+
+        /* 5. FLASHBANG */
+        .vfx-flashbang { position: absolute; inset: 0; background: white; z-index: 60; animation: flash-out 0.2s linear forwards; pointer-events: none; }
+        @keyframes flash-out { 0% { opacity: 0.8; } 100% { opacity: 0; } }
+
+        /* Hit & Shake */
+        .shake-heavy { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-3px, 0, 0); } 20%, 80% { transform: translate3d(6px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-8px, 0, 0); } 40%, 60% { transform: translate3d(8px, 0, 0); } }
+
+        .vfx-hit-impact { position: absolute; top: 50%; left: 50%; width: 250px; height: 250px; transform: translate(-50%, -50%); pointer-events: none; z-index: 45; background: radial-gradient(circle, #ffffff 0%, transparent 60%); mix-blend-mode: overlay; animation: hit-flash-anim 0.2s ease-out forwards; }
+        @keyframes hit-flash-anim { 0% { opacity: 1; transform: translate(-50%, -50%) scale(0.2); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); } }
+
+        /* Boss Attack */
+        .vfx-claw { position: absolute; inset: 0; z-index: 60; pointer-events: none; }
+        .claw-mark { position: absolute; background: white; box-shadow: 0 0 15px red; height: 150%; width: 5px; top: -25%; opacity: 0; }
+        .claw-1 { left: 30%; transform: rotate(25deg); animation: slash 0.3s ease-out forwards; }
+        .claw-2 { left: 50%; transform: rotate(25deg); animation: slash 0.3s ease-out 0.1s forwards; }
+        .claw-3 { left: 70%; transform: rotate(25deg); animation: slash 0.3s ease-out 0.2s forwards; }
+        @keyframes slash { 0% { transform: translateY(-100%) rotate(25deg); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(100%) rotate(25deg); opacity: 0; } }
+
+        /* Damage Numbers */
+        @keyframes floatUp { 0% { transform: translate(-50%, 0) scale(0.5); opacity: 0; } 15% { transform: translate(-50%, -40px) scale(1.5); opacity: 1; text-shadow: 0 0 10px white; } 100% { transform: translate(-50%, -150px) scale(1); opacity: 0; } }
+        .damage-number { position: absolute; animation: floatUp 0.8s forwards; pointer-events: none; font-weight: 900; text-shadow: 2px 2px 0 #000; z-index: 60; font-family: 'Cinzel', serif; }
+
+        /* UI UTILS */
+        [v-cloak] { display: none; }
+        .bar-gloss { background: linear-gradient(to bottom, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 100%); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+        
+        /* --- CUSTOM CURSOR (SWORD) --- */
+        .cursor-sword { 
+            cursor: url('https://img.icons8.com/ios-filled/32/cccccc/sword.png') 4 28, pointer; 
+        }
+    </style>
+</head>
+<body class="text-slate-100 h-screen w-screen selection:bg-indigo-500 selection:text-white flex flex-col">
+
+    <div id="app" v-cloak class="flex flex-col h-full w-full">
+        
+        <div class="loading-overlay" :class="{'fade-out': !isLoading}">
+            <div class="text-6xl md:text-8xl font-rpg font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-white to-purple-300 tracking-widest drop-shadow-[0_0_25px_rgba(255,255,255,0.5)] animate-pulse">ASTRAL</div>
+            <div class="text-xl text-indigo-200 mt-2 font-light tracking-[0.5em] uppercase">Legends of Elements</div>
+            <div class="loader-bar-bg">
+                <div class="loader-bar-fill" :style="{ width: loadingProgress + '%' }"></div>
+            </div>
+            <div class="mt-4 text-xs font-mono text-slate-500" v-text="loadingText"></div>
+        </div>
+
+        <header class="bg-slate-950/90 backdrop-blur-md border-b border-slate-800 p-2 z-50 shadow-lg flex-none min-h-[60px] flex items-center justify-between">
+            <div class="w-full max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-2 px-2">
+                <div class="flex items-center gap-2 shrink-0">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded rotate-45 flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.5)]"><span class="-rotate-45 text-lg">✦</span></div>
+                    <h1 class="hidden md:block text-xl font-rpg font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 to-white">ASTRAL</h1>
+                </div>
+                <nav class="flex flex-wrap justify-center items-center bg-slate-900/80 p-1 rounded-2xl border border-slate-700 mx-auto md:mx-0">
+                    <button @click="currentTab = 'gacha'" :class="currentTab === 'gacha' ? 'bg-slate-700 text-white shadow-md' : 'text-slate-400 hover:text-white'" class="px-4 py-1.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider">Summon</button>
+                    <button @click="currentTab = 'collection'" :class="currentTab === 'collection' ? 'bg-slate-700 text-white shadow-md' : 'text-slate-400 hover:text-white'" class="px-4 py-1.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider">Barracks</button>
+                    <button @click="currentTab = 'battle'" :class="currentTab === 'battle' ? 'bg-red-900/80 text-white border-red-500/30 border shadow-red-900/20 shadow-lg' : 'text-slate-400 hover:text-white'" class="px-4 py-1.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider flex items-center gap-2"><span>⚔️</span> <span class="hidden sm:inline">Battle</span></button>
+                </nav>
+                <div class="flex items-center gap-2 px-3 py-1 bg-slate-900 rounded-full border border-slate-700 shadow-inner shrink-0 ml-auto md:ml-0">
+                    <span class="text-cyan-400 text-sm">💎</span>
+                    <span class="font-mono font-bold text-sm md:text-lg">{{ gems.toLocaleString() }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-grow w-full relative overflow-hidden bg-slate-900 flex flex-col">
+
+            <div v-if="currentTab === 'gacha'" class="animate-reveal w-full h-full relative flex flex-col">
+                <div class="absolute inset-0 z-0 bg-slate-900"><img v-if="banners[activeBannerKey].bg" :src="banners[activeBannerKey].bg" class="w-full h-full object-cover transition-transform duration-[30s] hover:scale-110 ease-linear animate-reveal"><div v-else class="w-full h-full bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900"></div><div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div><div class="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-transparent md:w-1/2"></div></div>
+                <div class="relative z-10 w-full h-full flex flex-col justify-between p-4 md:p-8 lg:p-12 max-w-[1920px] mx-auto">
+                    <div class="w-full md:w-auto flex flex-col items-start gap-4">
+                        <div class="grid grid-cols-2 md:flex md:flex-row gap-2 md:gap-4 w-full md:w-auto">
+                            <button @click="switchBanner('event')" class="flex items-center justify-center md:justify-start gap-2 px-3 py-2 md:px-5 md:py-2.5 rounded-xl md:rounded-full backdrop-blur-md border border-white/10 transition-all duration-300 group hover:scale-105 active:scale-95" :class="activeBannerKey === 'event' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-100 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-black/40 text-slate-400 hover:bg-black/60'"><div class="w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center font-bold text-[9px] shrink-0" :class="activeBannerKey === 'event' ? 'border-yellow-400 text-yellow-400' : 'border-slate-500 text-slate-500'">★</div><div class="text-left overflow-hidden"><div class="text-[8px] uppercase font-bold tracking-widest opacity-70">Rate Up</div><div class="font-rpg text-xs md:text-sm leading-none whitespace-nowrap">Event Wish</div></div></button>
+                            <button @click="switchBanner('standard')" class="flex items-center justify-center md:justify-start gap-2 px-3 py-2 md:px-5 md:py-2.5 rounded-xl md:rounded-full backdrop-blur-md border border-white/10 transition-all duration-300 group hover:scale-105 active:scale-95" :class="activeBannerKey === 'standard' ? 'bg-blue-500/20 border-blue-500/50 text-blue-100 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'bg-black/40 text-slate-400 hover:bg-black/60'"><div class="w-5 h-5 md:w-6 md:h-6 rounded-full border-2 flex items-center justify-center font-bold text-[9px] shrink-0" :class="activeBannerKey === 'standard' ? 'border-blue-400 text-blue-400' : 'border-slate-500 text-slate-500'">∞</div><div class="text-left overflow-hidden"><div class="text-[8px] uppercase font-bold tracking-widest opacity-70">Standard</div><div class="font-rpg text-xs md:text-sm leading-none whitespace-nowrap">Wanderlust</div></div></button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-12 w-full mt-auto">
+                        <div class="flex flex-col gap-2 max-w-xl text-white animate-reveal" :key="activeBannerKey">
+                            <div class="flex items-center gap-2"><span class="px-2 py-0.5 bg-white text-black text-[9px] md:text-[10px] font-black uppercase tracking-widest rounded-sm">{{ activeBannerKey === 'event' ? 'Limited Time' : 'Permanent' }}</span><div class="h-px w-12 bg-white/50"></div></div>
+                            <h2 class="text-4xl md:text-6xl lg:text-7xl font-rpg font-black uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-400 drop-shadow-xl leading-[0.9]">{{ banners[activeBannerKey].title }}</h2>
+                            <p class="text-slate-300 text-xs md:text-sm font-medium drop-shadow-md border-l-2 border-white/30 pl-3 leading-relaxed">{{ banners[activeBannerKey].desc }}</p>
+                            <div class="flex gap-2 mt-2"><div class="bg-black/50 backdrop-blur border border-white/10 px-3 py-1 rounded"><div class="text-[8px] text-slate-400 uppercase font-bold">5★ Pity</div><div class="text-sm md:text-base font-mono text-white">{{ banners[activeBannerKey].pity5 }}<span class="text-slate-500">/70</span></div></div><div class="bg-black/50 backdrop-blur border border-white/10 px-3 py-1 rounded"><div class="text-[8px] text-slate-400 uppercase font-bold">4★ Pity</div><div class="text-sm md:text-base font-mono text-purple-300">{{ banners[activeBannerKey].pity4 }}<span class="text-slate-500">/10</span></div></div></div>
+                        </div>
+                        <div class="flex gap-3 w-full md:w-auto shrink-0">
+                            <button @click="pull(1)" :disabled="isPulling || gems < getPullCost(1)" class="flex-1 md:w-40 lg:w-48 group relative overflow-hidden bg-slate-800/60 backdrop-blur hover:bg-slate-700/80 border border-slate-500/50 rounded-xl p-3 md:p-4 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col justify-between h-20 md:h-24">
+                                <div class="text-[10px] text-slate-300 uppercase font-bold text-left group-hover:text-white">Single Wish</div>
+                                <div class="flex items-center justify-between w-full mt-1">
+                                    <span class="text-white font-rpg font-bold text-xl">x1</span>
+                                    <div class="flex items-center gap-1 text-cyan-300 bg-black/60 px-2 py-0.5 rounded-full text-[10px] md:text-xs font-mono">
+                                        💎 {{ getPullCost(1) }}
+                                    </div>
+                                </div>
+                            </button>
+                            <button @click="pull(10)" :disabled="isPulling || gems < getPullCost(10)" class="flex-1 md:w-40 lg:w-48 btn-shine group relative overflow-hidden bg-gradient-to-br from-amber-600/90 to-yellow-700/90 backdrop-blur hover:brightness-110 border border-amber-400/50 rounded-xl p-3 md:p-4 shadow-[0_0_20px_rgba(245,158,11,0.2)] transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col justify-between h-20 md:h-24">
+                                <div class="text-[10px] text-amber-100 uppercase font-bold text-left">Tenfold Wish</div>
+                                <div class="flex items-center justify-between w-full mt-1">
+                                    <span class="text-white font-rpg font-bold text-xl">x10</span>
+                                    <div class="flex items-center gap-1 text-white bg-black/30 px-2 py-0.5 rounded-full text-[10px] md:text-xs font-mono border border-white/20">
+                                        💎 {{ getPullCost(10) }}
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="currentTab === 'collection'" class="animate-reveal w-full h-full overflow-y-auto p-4 md:p-6 pb-20">
+                <div class="max-w-7xl mx-auto">
+                    <div class="flex justify-between items-end mb-6 border-b border-slate-800 pb-4"><div><h2 class="text-2xl font-rpg text-white">Barracks</h2><p class="text-sm text-slate-500">Manage your ascended heroes.</p></div><div class="text-right"><span class="text-xs text-slate-500 uppercase tracking-widest">Total CP</span><div class="text-xl font-mono font-bold text-indigo-400">{{ totalAccountPower.toLocaleString() }}</div></div></div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
+                        <div v-for="char in inventory" :key="char.id" @click="inspectChar(char)" class="bg-slate-800 rounded-xl overflow-hidden border-2 transition-all hover:scale-[1.02] group relative cursor-pointer hover:border-indigo-400" :class="getRarityClass(char.rarity)">
+                            <div class="aspect-[3/4] relative">
+                                <img :src="char.img" class="w-full h-full object-cover">
+                                <div class="absolute top-2 left-2 z-10 bg-black/80 px-2 py-0.5 rounded border border-white/20 text-[10px] font-bold text-white shadow-md">Lv.{{ getLevel(char) }}</div>
+                            </div>
+                            <div class="p-3 bg-slate-900 border-t border-slate-700"><h4 class="font-bold text-xs text-white truncate" :class="char.rarity === 'legendary' ? 'text-yellow-400' : ''">{{ char.name }}</h4><div class="text-[10px] text-slate-400 mt-1 flex justify-between"><span>CP</span><span class="font-mono text-white">{{ calcCP(char).toLocaleString() }}</span></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="currentTab === 'battle'" class="animate-reveal w-full h-full flex flex-col bg-slate-950">
+                
+                <div v-if="battleState === 'stages'" class="w-full h-full overflow-y-auto p-6">
+                    <div class="max-w-5xl mx-auto text-center">
+                        <h2 class="text-3xl font-rpg text-white mb-2">CAMPAIGN MAP</h2>
+                        <p class="text-slate-400 mb-8">Select a region to subjugate.</p>
+                        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                            <div v-for="stage in stages" :key="stage.id" @click="selectStage(stage)" class="aspect-square bg-slate-900 border border-slate-700 hover:border-red-500 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-105 group relative overflow-hidden">
+                                
+                                <img :src="stage.bossImg" draggable="false" class="w-[70px] h-[80px] mb-2 object-contain drop-shadow-2xl group-hover:scale-110 transition-transform">
+                                
+                                <div class="font-bold text-sm text-slate-300">Stage {{ stage.id }}</div>
+                                <div class="text-[10px] text-slate-500">Rec CP: {{ stage.recPower.toLocaleString() }}</div>
+                                <div v-if="clearedStages.has(stage.id)" class="absolute top-2 right-2 bg-green-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-lg tracking-widest border border-green-400">Clear</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else class="w-full h-full flex flex-col md:flex-row max-w-[1920px] mx-auto relative">
+                    
+                    <button v-if="battleState === 'fighting'" @click="quitBattle" class="absolute top-4 right-4 z-50 bg-black/60 hover:bg-red-900/80 border border-slate-600 hover:border-red-500 text-white text-[10px] font-bold px-4 py-2 rounded-full backdrop-blur transition-all uppercase tracking-widest shadow-lg">Forfeit</button>
+
+                    <div class="relative w-full h-[60%] md:h-full md:w-[70%] bg-black overflow-hidden shadow-2xl z-10" 
+                         :class="{'shake-heavy': isScreenShaking, 'cursor-sword': battleState === 'fighting'}" 
+                         @mousedown.stop="handleManualClick">
+                        
+                        <div class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1542256844-325514574931?q=80&w=2000')] bg-cover bg-center opacity-40"></div>
+                        <div class="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950/90"></div>
+                        
+                        <div v-if="activeFxName" class="vfx-layer">
+                            <div v-if="activeFxName === 'vfx-thunder'" class="effect-thunder"></div>
+                            <div v-if="activeFxName === 'vfx-sakura'" class="effect-sakura"></div>
+                            <div v-if="activeFxName === 'vfx-inferno'" class="effect-inferno"></div>
+                            <div v-if="activeFxName === 'vfx-life'" class="effect-life"></div>
+                        </div>
+
+                        <div v-if="showFlash" class="vfx-flashbang"></div>
+                        <div v-if="showHitImpact" class="vfx-hit-impact"></div>
+                        <div v-if="isBossAttacking" class="vfx-claw"><div class="claw-mark claw-1"></div><div class="claw-mark claw-2"></div><div class="claw-mark claw-3"></div></div>
+
+                        <div v-if="['fighting','won','lost'].includes(battleState)" class="absolute top-14 left-1/2 -translate-x-1/2 w-[90%] max-w-lg z-30 pointer-events-none transition-all duration-300">
+                            <div class="flex justify-between text-xs font-bold uppercase text-white mb-1 drop-shadow-md"><span class="text-red-500 tracking-widest">⚠️ Boss Entity</span><span class="font-mono text-shadow">{{ Math.floor(bossHp).toLocaleString() }} / {{ Math.floor(maxBossHp).toLocaleString() }}</span></div>
+                            <div class="w-full h-4 bg-slate-900/90 rounded-full border border-slate-600 overflow-hidden relative shadow-lg"><div class="absolute inset-0 bar-gloss z-10"></div><div class="h-full bg-gradient-to-r from-red-600 to-red-500 transition-all duration-200" :style="{ width: (bossHp / maxBossHp * 100) + '%' }"></div></div>
+                            <div class="mt-1 flex items-center gap-2">
+                                <div class="text-[9px] font-black uppercase text-yellow-500 tracking-wider">Attack Charge</div>
+                                <div class="flex-grow h-1.5 bg-slate-900 rounded-full border border-slate-700 overflow-hidden"><div class="h-full bg-gradient-to-r from-yellow-400 to-red-500 transition-all duration-100 linear" :style="{ width: (bossAttackTimer / bossAttackInterval * 100) + '%' }"></div></div>
+                                <div class="text-[9px] font-mono text-white w-8 text-right">{{ bossAttackTimer.toFixed(1) }}s</div>
+                            </div>
+                        </div>
+
+                        <div v-if="['fighting','won','lost'].includes(battleState)" class="absolute top-[55%] left-1/2 -translate-x-1/2 -translate-y-1/2 transition-transform duration-100 flex items-center justify-center z-10" :class="{'boss-hit': isBossHit}">
+                             <img :src="selectedStage.bossImg" draggable="false" class="w-[300px] h-[300px] object-contain drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] filter brightness-110 select-none pointer-events-none">
+                        </div>
+
+                        <div v-if="['fighting','won','lost'].includes(battleState)" class="absolute bottom-4 w-full flex justify-center gap-4 px-4 z-20 pointer-events-none">
+                            <div v-for="char in party" :key="char ? char.id : Math.random()" class="relative transition-transform duration-150" :class="{'translate-y-[-20px] scale-110': char && char.attackAnim}">
+                                <div v-if="char" class="w-14 h-14 md:w-20 md:h-20 rounded-full border-2 overflow-hidden shadow-2xl bg-slate-900" :class="char.rarity==='legendary'?'border-yellow-400 shadow-[0_0_15px_gold]':'border-slate-500'"><img :src="char.img" class="w-full h-full object-cover"></div>
+                            </div>
+                        </div>
+
+                        <div v-for="dmg in damageNumbers" :key="dmg.id" class="damage-number" :style="{ left: dmg.x + 'px', top: dmg.y + 'px', color: dmg.color, fontSize: dmg.size }">{{ dmg.val }}</div>
+
+                        <div v-if="battleState === 'won'" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50 animate-reveal">
+                            <h2 class="text-6xl font-rpg text-yellow-400 mb-2 drop-shadow-[0_0_20px_gold]">VICTORY</h2>
+                            <div class="flex flex-col items-center gap-2 mb-6">
+                                <span class="text-slate-400 text-xs uppercase tracking-widest">Loot Acquired</span>
+                                <div class="flex items-center gap-2 text-2xl font-mono font-bold text-cyan-400 bg-slate-900/80 px-6 py-2 rounded-full border border-cyan-500/30"><span>💎</span><span>+{{ battleReward.toLocaleString() }}</span></div>
+                            </div>
+                            <button @click="battleState = 'stages'" class="mt-4 px-8 py-2 bg-white text-black font-bold rounded hover:scale-105 transition-transform">Return</button>
+                        </div>
+                        <div v-if="battleState === 'lost'" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50 animate-reveal"><h2 class="text-6xl font-rpg text-red-600 mb-2 drop-shadow-[0_0_20px_red]">DEFEAT</h2><button @click="battleState = 'prep'" class="mt-4 px-8 py-2 bg-red-600 text-white font-bold rounded">Retry</button></div>
+                        
+                        <div v-if="battleState === 'prep'" class="absolute inset-0 flex flex-col items-center justify-center bg-black/70 z-40 backdrop-blur-sm p-4">
+                            <button @click="battleState = 'stages'" class="absolute top-4 left-4 text-xs font-bold text-slate-300 hover:text-white border border-slate-500 px-3 py-1 rounded-full bg-black/50">← Map</button>
+                            <h2 class="text-2xl md:text-4xl font-rpg text-white mb-6">DEPLOYMENT</h2>
+                            <div class="flex gap-2 md:gap-6 mb-8">
+                                <div v-for="i in 4" :key="i" class="w-16 h-24 md:w-28 md:h-40 bg-slate-900/80 border-2 border-dashed border-slate-600 rounded-lg flex items-center justify-center cursor-pointer hover:border-white relative transition-all" @click="openPartySelector(i-1)">
+                                    <img v-if="party[i-1]" :src="party[i-1].img" class="w-full h-full object-cover rounded-lg">
+                                    <div v-if="party[i-1]" @click.stop="removeFromPartySlot(i-1)" class="absolute -top-2 -right-2 w-5 h-5 bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] shadow">✕</div>
+                                    <span v-else class="text-2xl text-slate-600">+</span>
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-400 mb-4">Boss Power: {{ selectedStage.recPower.toLocaleString() }} CP</div>
+                            <button @click="startBattle" :disabled="party.filter(x=>x).length===0" class="px-8 py-3 bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest rounded shadow-lg shadow-red-900/50 disabled:opacity-50 transition-all active:scale-95">START BATTLE</button>
+                        </div>
+                    </div>
+
+                    <div v-if="['fighting','won','lost'].includes(battleState)" class="w-full h-[40%] md:h-full md:w-[30%] bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 p-4 flex flex-col gap-4 relative z-20">
+                        <div class="bg-slate-800/50 border border-slate-600 rounded-xl p-4 shadow-inner">
+                            <div class="flex justify-between text-xs font-bold uppercase text-slate-400 mb-2"><span>Squad Integrity</span><span class="font-mono text-white">{{ Math.floor(partyHp).toLocaleString() }} / {{ Math.floor(maxPartyHp).toLocaleString() }}</span></div>
+                            <div class="w-full h-4 bg-slate-950 rounded-full border border-slate-700 overflow-hidden relative"><div class="absolute inset-0 bar-gloss z-10"></div><div class="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-300" :style="{ width: Math.max(0, (partyHp / maxPartyHp * 100)) + '%' }"></div></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 flex-grow">
+                            <div v-for="(char, idx) in party" :key="idx" class="relative h-full">
+                                <button v-if="char" @click="useSkill(idx)" :disabled="char.currentCd > 0 || battleState !== 'fighting'" class="w-full h-full bg-slate-800 border-2 rounded-xl relative overflow-hidden group hover:bg-slate-700 active:scale-95 transition-all flex flex-col items-center justify-center shadow-lg" :class="char.rarity === 'legendary' ? 'border-yellow-500/50' : 'border-slate-600'">
+                                    <div v-if="char.currentCd > 0" class="absolute inset-0 bg-slate-950/80 z-20 flex items-center justify-center"><span class="text-2xl font-mono font-bold text-white">{{ Math.ceil(char.currentCd) }}</span></div>
+                                    <div class="text-2xl mb-1 relative z-10 filter drop-shadow-lg">{{ getRoleIcon(char.role) }}</div><div class="text-[10px] font-black uppercase text-slate-300 z-10">{{ char.skillName }}</div><img :src="char.img" class="absolute inset-0 w-full h-full object-cover opacity-20 grayscale group-hover:grayscale-0 transition-all"><div v-if="char.currentCd <= 0 && char.rarity === 'legendary'" class="absolute inset-0 border-2 border-yellow-400 opacity-50 animate-pulse rounded-xl"></div>
+                                </button>
+                                <div v-else class="w-full h-full bg-slate-900/50 border border-slate-800 rounded-xl flex items-center justify-center opacity-30"><span class="text-2xl">🔒</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="isAnimating" class="fixed inset-0 z-[70] bg-black flex items-center justify-center"><img :src="pullGif" class="w-full h-full object-cover opacity-90"></div>
+            
+            <div v-if="showResults" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/95 backdrop-blur-xl" @click.self="closeResults">
+                <button @click="closeResults" class="absolute top-6 right-6 text-slate-400 hover:text-white transition flex items-center gap-2 group z-50"><span class="uppercase tracking-widest text-xs font-bold">Close</span><div class="w-8 h-8 rounded-full border border-slate-600 flex items-center justify-center">✕</div></button>
+                <div class="grid grid-cols-5 gap-3 md:gap-4 max-w-6xl p-4 w-full">
+                    <div v-for="(char, index) in currentPullResult" :key="index" class="relative animate-reveal aspect-[2/3] flex flex-col items-center" :style="{ animationDelay: `${index * 150}ms`, opacity: 0 }">
+                        <div class="w-full h-full rounded-xl overflow-hidden border-2 relative group transition hover:scale-105 duration-300" :class="getRarityClass(char.rarity)">
+                            <img :src="char.img" class="w-full h-full object-cover">
+                            <div class="absolute bottom-0 w-full bg-gradient-to-t from-black via-black/80 to-transparent p-1 md:p-3 pt-6 md:pt-10 text-center">
+                                <div class="text-white font-bold text-[9px] md:text-sm shadow-black drop-shadow-md truncate w-full px-1">{{ char.name }}</div>
+                                <div class="text-[8px] md:text-[10px] text-yellow-400">{{ getStars(char.rarity) }}</div>
+                            </div>
+                            <div v-if="char.isNew" class="absolute top-0 left-0 bg-red-600 text-white text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-br-lg shadow-lg z-20">New</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div v-if="showSelector" class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4" @click.self="closeSelector"><div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl flex flex-col overflow-hidden shadow-2xl animate-reveal max-h-[80vh]"><div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-950"><h3 class="font-rpg text-xl text-white">Select Unit</h3><button @click="closeSelector" class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700">✕</button></div><div class="overflow-y-auto p-4 grid grid-cols-4 md:grid-cols-6 gap-3"><div v-for="char in inventory" :key="char.id" @click="selectCharForSlot(char)" class="bg-slate-800 rounded-xl overflow-hidden border transition-all hover:border-yellow-500 hover:scale-105 cursor-pointer relative group" :class="[getRarityClass(char.rarity), isCharInOtherSlot(char.id) ? 'opacity-40 grayscale' : 'border-slate-700']"><div class="aspect-[3/4]"><img :src="char.img" class="w-full h-full object-cover"></div><div class="absolute bottom-0 w-full bg-black/80 p-1 text-center"><div class="text-[9px] text-white font-bold truncate" :class="char.rarity==='legendary'?'text-yellow-400':''">{{ char.name }}</div><div class="text-[8px] text-slate-400">Lv.{{ getLevel(char) }}</div></div></div></div></div></div>
+            <div v-if="inspectedChar" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/95 backdrop-blur-sm p-4" @click.self="inspectedChar = null"><div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl h-[90vh] md:h-auto overflow-hidden flex flex-col md:flex-row shadow-2xl animate-reveal relative"><button @click="inspectedChar = null" class="absolute top-4 right-4 z-50 w-8 h-8 bg-black/50 hover:bg-white/20 rounded-full text-white flex items-center justify-center transition">✕</button><div class="w-full md:w-2/5 h-64 md:h-auto relative bg-gradient-to-b from-slate-800 to-slate-900 shrink-0"><img :src="inspectedChar.img" class="w-full h-full object-cover"><div class="absolute bottom-0 w-full bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent p-4"><div class="text-3xl md:text-4xl font-rpg text-white drop-shadow-lg">{{ inspectedChar.name }}</div><div class="flex items-center gap-2 mt-1"><span class="text-xs font-bold px-2 py-0.5 rounded bg-white text-black uppercase tracking-wider">{{ inspectedChar.role }}</span><span class="text-sm font-bold text-yellow-400">{{ getStars(inspectedChar.rarity) }}</span></div></div></div><div class="w-full md:w-3/5 p-6 md:p-8 flex flex-col overflow-y-auto"><h3 class="text-sm uppercase font-bold text-slate-500 tracking-widest mb-4 border-b border-slate-700 pb-2">Attribute Analysis</h3><div class="mb-6 bg-slate-800/50 p-4 rounded-xl border border-slate-700"><div class="flex justify-between items-end mb-2"><span class="text-2xl font-mono font-bold text-white">Lv. {{ getLevel(inspectedChar) }}</span><span class="text-xs text-slate-400 font-bold uppercase">Ascension Progress</span></div><div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden relative border border-slate-700/50"><div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.05)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.05)_50%,rgba(255,255,255,0.05)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem]"></div><div class="h-full bg-gradient-to-r from-indigo-500 to-purple-500" :style="{ width: ((inspectedChar.xp % getXpReq(inspectedChar.rarity)) / getXpReq(inspectedChar.rarity) * 100) + '%' }"></div></div><div class="text-right text-[10px] text-slate-500 mt-1 uppercase font-bold">{{ inspectedChar.xp % getXpReq(inspectedChar.rarity) }} / {{ getXpReq(inspectedChar.rarity) }} Copies</div></div><div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6"><div class="bg-slate-800 p-3 rounded border border-slate-700 text-center"><div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Combat Power</div><div class="text-xl font-mono font-bold text-indigo-400">{{ calcCP(inspectedChar).toLocaleString() }}</div></div><div class="bg-slate-800 p-3 rounded border border-slate-700 text-center"><div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Health Points</div><div class="text-xl font-mono font-bold text-green-400">{{ calcStats(inspectedChar).hp.toLocaleString() }}</div></div><div class="bg-slate-800 p-3 rounded border border-slate-700 text-center col-span-2 md:col-span-1"><div class="text-[10px] text-slate-500 uppercase font-bold mb-1">Attack</div><div class="text-xl font-mono font-bold text-red-400">{{ calcStats(inspectedChar).atk.toLocaleString() }}</div></div></div><h3 class="text-sm uppercase font-bold text-slate-500 tracking-widest mb-4 border-b border-slate-700 pb-2">Combat Skill</h3><div class="bg-gradient-to-br from-slate-800 to-slate-900 p-4 rounded-xl border border-slate-700 flex gap-4 items-start"><div class="w-12 h-12 bg-black rounded flex items-center justify-center text-2xl border border-slate-600 shadow-inner shrink-0">{{ getRoleIcon(inspectedChar.role) }}</div><div><h4 class="font-bold text-white text-lg leading-none mb-1">{{ inspectedChar.skillName }}</h4><div class="flex gap-2 text-[10px] font-bold uppercase text-slate-400 mb-2"><span class="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">Type: {{ inspectedChar.skillType }}</span><span class="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">CD: {{ inspectedChar.cd }}s</span></div><p class="text-sm text-slate-300 leading-snug">Activates a powerful {{ inspectedChar.skillType }} effect. Effectiveness scales with Attack Power.<span v-if="inspectedChar.rarity === 'legendary'" class="text-yellow-500 block mt-1">★ Legendary Bonus: Double Damage Multiplier.</span></p></div></div></div></div></div>
+
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, reactive, onMounted } = Vue;
+        const PULL_GIF_URL = "https://media1.tenor.com/m/rOuL0G1uRpMAAAAd/genshin-impact-pull.gif"; 
+
+        const BOSS_URLS = [
+            "https://media.tenor.com/ptvkRgwKgEUAAAAj/boss-monster.gif",
+            "https://media.tenor.com/zHW-uBjGBJoAAAAj/monster-dharkhon-final-boss.gif",
+            "https://media.tenor.com/YKp3uomeGMgAAAAi/evil-laugh-mageseeker.gif",
+            "https://media.tenor.com/_HoOG5t_zS4AAAAi/cake-monster-monsta.gif",
+            "https://media.tenor.com/njHNXYmi_CYAAAAi/blinking-eyes-eye-blink.gif",
+            "https://media.tenor.com/LF26z-94uCkAAAAi/spore.gif",
+            "https://media.tenor.com/SWrwI-FdHOcAAAAi/egg-drillster-sonic-2.gif",
+            "https://media.tenor.com/FhLHoI_zCbAAAAAi/giga-bowser-jr.gif",
+            "https://media.tenor.com/84D0FyX9KQQAAAAi/skullgirls-lab-zero-games.gif",
+            "https://media1.tenor.com/m/hKwsAxwYevMAAAAC/teamsans-undertale.gif",
+            "https://media.tenor.com/XtGvdfOrlEwAAAAi/cherri-cherrikko.gif",
+            "https://media.tenor.com/QDeeQDF4kAwAAAAi/genshin-impact-raiden-shogun.gif",
+            "https://media.tenor.com/EDG5N5ObzhgAAAAi/cute.gif",
+            "https://media.tenor.com/XmUpFK6JyU8AAAAi/cute-please.gif",
+            "https://media1.tenor.com/m/usv1NOx2nLQAAAAd/one-piece-one-piece-anime.gif",
+            "https://media.tenor.com/AUaTmhkdY-0AAAAi/tea-the-khajiit-cute.gif",
+            "https://media.tenor.com/tjGt3rmoM_MAAAAi/malenia-elden-ring.gif",
+            "https://media.tenor.com/I8RGJtJhbQ8AAAAi/ranni-ranni-the-witch.gif",
+            "https://media.tenor.com/QTbcrC893SIAAAAi/solaire.gif",
+            "https://media.tenor.com/NzbtMbVCctEAAAAj/um-logo-um.gif",
+        ];
+
+        const AUDIO_LIBRARY = {
+            summon: 'https://cdn.freesound.org/previews/320/320655_5260872-lq.mp3', 
+            battle_hit_light: 'https://cdn.freesound.org/previews/566/566435_11270275-lq.mp3',
+            battle_hit_heavy: 'https://cdn.freesound.org/previews/163/163456_2437358-lq.mp3',
+            boss_attack: 'https://cdn.freesound.org/previews/173/173958_3226330-lq.mp3',
+            boss_hit: 'https://cdn.freesound.org/previews/344/344143_2660183-lq.mp3'
+        };
+
+        const playSfx = (key) => {
+            const src = AUDIO_LIBRARY[key];
+            if(src) { const a = new Audio(src); a.volume = 0.4; a.play().catch(e=>{}); }
+        };
+
+        createApp({
+            setup() {
+                const isLoading = ref(true);
+                const loadingProgress = ref(0);
+                const loadingText = ref('Initializing Core Systems...');
+
+                onMounted(() => {
+                    const texts = ['Loading Assets...', 'Summoning Heroes...', 'Calibrating Magic...', 'Generating World...'];
+                    let step = 0;
+                    const interval = setInterval(() => {
+                        loadingProgress.value += 2;
+                        if(loadingProgress.value % 25 === 0) {
+                            loadingText.value = texts[step % texts.length];
+                            step++;
+                        }
+                        if(loadingProgress.value >= 100) {
+                            clearInterval(interval);
+                            setTimeout(() => isLoading.value = false, 500);
+                        }
+                    }, 100); 
+                });
+
+                const DB_CHARS = {
+                    'Seraphina': { role: 'DPS', baseHp: 2500, baseAtk: 400, skillName: 'Holy Nova', skillType: 'AOE', cd: 8, img: 'https://media1.tenor.com/m/8u_bu0OIQRIAAAAd/genshin-genshin-impact.gif', effectId: 'vfx-thunder' },
+                    'Kitsune Miko': { role: 'DPS', baseHp: 2200, baseAtk: 420, skillName: 'Fox Fire', skillType: 'DOT', cd: 6, img: 'https://media1.tenor.com/m/PmJpLydJdGgAAAAd/tcg-genshin.gif', effectId: 'vfx-sakura' },
+                    'Dragon Girl': { role: 'TANK', baseHp: 3500, baseAtk: 250, skillName: 'Scale Armor', skillType: 'SHIELD', cd: 10, img: 'https://media1.tenor.com/m/WRBJtwbrWKMAAAAd/genshin-genshin-impact.gif', effectId: 'vfx-inferno' },
+                    'Saintess Livia': { role: 'SUP', baseHp: 2800, baseAtk: 300, skillName: 'Eternal Bloom', skillType: 'HEAL', cd: 10, img: 'https://media1.tenor.com/m/PtJzRe2tGEQAAAAd/genshin-genshin-archon.gif', effectId: 'vfx-life' },
+                    'Commander Rose': { role: 'SUP', baseHp: 1500, baseAtk: 180, skillName: 'Command', skillType: 'BUFF', cd: 12, img: 'https://media1.tenor.com/m/4UuN0-BC4OoAAAAd/genshin-genshin-impact.gif' },
+                    'Cyber Neko': { role: 'DPS', baseHp: 1100, baseAtk: 200, skillName: 'Laser', skillType: 'DMG', cd: 4, img: 'https://media1.tenor.com/m/g4yiCe_o8MAAAAAd/faruzan-tcg.gif' },
+                    'Vampire Ella': { role: 'DPS', baseHp: 1300, baseAtk: 190, skillName: 'Drain', skillType: 'LIFESTEAL', cd: 7, img: 'https://media1.tenor.com/m/ivQhio5P6FoAAAAC/yoimiya-genshin-impact.gif' },
+                    'Sniper Yoko': { role: 'DPS', baseHp: 1000, baseAtk: 250, skillName: 'Snipe', skillType: 'NUKE', cd: 9, img: 'https://media1.tenor.com/m/bW7XTT9X_XsAAAAd/genshin-genshin-impact.gif' },
+                    'Guard A': { role: 'TANK', baseHp: 1000, baseAtk: 100, skillName: 'Block', skillType: 'DEF', cd: 5, img: 'https://media1.tenor.com/m/Mqnat_0gAw0AAAAd/arataki-itto-genshin-itto.gif' },
+                    'Mage B': { role: 'DPS', baseHp: 800, baseAtk: 140, skillName: 'Fireball', skillType: 'DMG', cd: 5, img: 'https://media1.tenor.com/m/Q5b6-vIcQeAAAAAd/genshin-genshin-amber.gif' },
+                    'Slime': { role: 'SUP', baseHp: 700, baseAtk: 80, skillName: 'Goo', skillType: 'SLOW', cd: 5, img: 'https://media1.tenor.com/m/y9MR51nEufcAAAAd/genshin-genshin-amber.gif' },
+                    'Goblin': { role: 'DPS', baseHp: 750, baseAtk: 110, skillName: 'Stab', skillType: 'DMG', cd: 3, img: 'https://media1.tenor.com/m/V-zkywRGe94AAAAd/fischl-genshin-fischl.gif' }
+                };
+                
+                const RATE_UP_CHAR = 'Kitsune Miko';
+                const POOLS = { legendary: ['Seraphina','Kitsune Miko','Dragon Girl', 'Saintess Livia'], rare: ['Commander Rose','Cyber Neko','Vampire Ella','Sniper Yoko'], common: ['Guard A','Mage B','Slime','Goblin'] };
+                const XP_REQS = { legendary: 2, rare: 5, common: 15 };
+                
+                const stages = ref(Array.from({length: 20}, (_, i) => ({ 
+                    id: i + 1, 
+                    name: i === 19 ? 'Throne of God' : `Zone ${i+1}`, 
+                    bossImg: BOSS_URLS[i] || 'https://placehold.co/400x400/000/fff?text=Unknown', 
+                    recPower: Math.floor(1000 * Math.pow(1.22, i+1)) 
+                })));
+                
+                const clearedStages = ref(new Set(JSON.parse(localStorage.getItem('gacha_cleared') || '[]')));
+
+                const defaultBanners = { 
+                    event: { title: 'Fox\'s Promise', desc: 'Rate Up: Kitsune Miko. 50/50 Mechanics.', bg: 'https://cdn.shopify.com/s/files/1/0747/5317/9944/files/yae-miko.jpg?v=1708670082', pity5: 0, pity4: 0, guaranteed: false }, 
+                    standard: { title: 'Wanderlust', desc: 'Standard Pool. 10% Discount!', bg: 'https://webstatic.hoyoverse.com/upload/uploadstatic/contentweb/20200807/2020080718411869987.png', pity5: 0, pity4: 0, guaranteed: false } 
+                };
+                const banners = ref(localStorage.getItem('gacha_banners_v3') ? JSON.parse(localStorage.getItem('gacha_banners_v3')) : defaultBanners);
+
+                const currentTab = ref('gacha');
+                const gems = ref(parseInt(localStorage.getItem('gacha_gems') || '16000'));
+                const inventory = ref([]);
+                const activeBannerKey = ref('event');
+                
+                const isPulling = ref(false); const isAnimating = ref(false); const pullGif = ref(PULL_GIF_URL); const showResults = ref(false); const currentPullResult = ref([]); const inspectedChar = ref(null);
+                
+                const battleState = ref('stages'); const selectedStage = ref(null); const party = ref([null, null, null, null]); 
+                const showSelector = ref(false); const selectedSlotIndex = ref(0);
+                const bossHp = ref(100); const maxBossHp = ref(100); const partyHp = ref(100); const maxPartyHp = ref(100);
+                const battleTimer = ref(60); const bossScale = ref(1); const damageNumbers = ref([]); const battleReward = ref(0);
+                
+                const activeFxName = ref(null); 
+                const showHitImpact = ref(false);
+                const showFlash = ref(false); 
+                const isBossHit = ref(false);
+                const isBossAttacking = ref(false);
+                const isScreenShaking = ref(false);
+                const bossAttackInterval = 2.5; const bossAttackTimer = ref(2.5);
+                const currentBossDmg = ref(0); 
+                let gameLoopId = null;
+
+                const getXpReq = (r) => XP_REQS[r] || 15;
+                const getLevel = (c) => Math.floor(c.xp / getXpReq(c.rarity)) + 1;
+                const calcStats = (c) => { const db = DB_CHARS[c.name]; const l = getLevel(c); let m = 1.0; if(c.rarity==='legendary') m = 2.5 * Math.pow(1.15, l-1); else if(c.rarity==='rare') m = 1.5 * Math.pow(1.08, l-1); else m = 1.0 * Math.pow(1.05, l-1); return { hp: Math.floor(db.baseHp * m), atk: Math.floor(db.baseAtk * m) }; };
+                const calcCP = (c) => { const s = calcStats(c); return Math.floor(s.atk + (s.hp / 5)); };
+                const getRarityClass = (r) => r==='legendary'?'rarity-5':r==='rare'?'rarity-4':'rarity-3';
+                const getStars = (r) => r==='legendary'?'★★★★★':r==='rare'?'★★★★':'★★★';
+                const getRoleIcon = (r) => r==='DPS'?'⚔️':r==='TANK'?'🛡️':'❤️';
+
+                const initInv = () => { const s = localStorage.getItem('gacha_inv_v3'); return s ? JSON.parse(s).sort((a,b) => calcCP(b) - calcCP(a)) : []; };
+                inventory.value = initInv();
+                const switchBanner = (k) => activeBannerKey.value = k;
+                const saveData = () => { localStorage.setItem('gacha_gems', gems.value); localStorage.setItem('gacha_inv_v3', JSON.stringify(inventory.value)); localStorage.setItem('gacha_banners_v3', JSON.stringify(banners.value)); localStorage.setItem('gacha_cleared', JSON.stringify([...clearedStages.value])); };
+
+                const getPullCost = (amount) => {
+                    const baseCost = 160;
+                    const costPerPull = activeBannerKey.value === 'standard' ? Math.floor(baseCost * 0.9) : baseCost;
+                    return costPerPull * amount;
+                };
+
+                const pull = (amt) => { 
+                    const cost = getPullCost(amt);
+                    if(gems.value < cost) return; 
+                    gems.value -= cost; 
+                    
+                    isPulling.value=true; showResults.value=false; isAnimating.value=true; playSfx('summon');
+                    const b=banners.value[activeBannerKey.value]; 
+                    const eventLegendaries = POOLS.legendary.filter(n => n !== RATE_UP_CHAR); 
+                    const standardPool = POOLS.legendary.filter(n => n !== RATE_UP_CHAR); 
+                    
+                    setTimeout(()=>{ 
+                        const results = [];
+                        const currentInventory = [...inventory.value];
+
+                        for(let i=0; i<amt; i++){ 
+                            b.pity5++; b.pity4++; 
+                            let n = '', r = 'common'; 
+                            
+                            // --- NEW PITY LOGIC (53 / 70) ---
+                            let rate5 = 0.006;
+                            if (b.pity5 >= 53) rate5 += (b.pity5 - 52) * 0.06; 
+                            if (b.pity5 >= 70) rate5 = 1.0; 
+
+                            if(Math.random() < rate5){ 
+                                r = 'legendary'; b.pity5 = 0; 
+                                if(activeBannerKey.value === 'event'){ 
+                                    if(b.guaranteed){ n = RATE_UP_CHAR; b.guaranteed = false; }
+                                    else{ 
+                                        if(Math.random() < 0.5) n = RATE_UP_CHAR; 
+                                        else{ n = eventLegendaries[Math.floor(Math.random() * eventLegendaries.length)]; b.guaranteed = true; } 
+                                    } 
+                                } else { n = standardPool[Math.floor(Math.random() * standardPool.length)]; } 
+                            } else { 
+                                let rate4 = 0.051; if(b.pity4 >= 10) rate4 = 1.0; 
+                                if(Math.random() < rate4){ r = 'rare'; b.pity4 = 0; n = POOLS.rare[Math.floor(Math.random() * POOLS.rare.length)]; } 
+                                else { r = 'common'; n = POOLS.common[Math.floor(Math.random() * POOLS.common.length)]; } 
+                            } 
+                            
+                            const existingChar = currentInventory.find(c => c.name === n);
+                            let isNew = false;
+
+                            if (existingChar) {
+                                existingChar.xp++;
+                                isNew = false;
+                            } else {
+                                const db = DB_CHARS[n];
+                                const newChar = { id: n, name: n, rarity: r, xp: 0, img: db.img, role: db.role, ...db };
+                                currentInventory.push(newChar);
+                                isNew = true;
+                            }
+
+                            results.push({ name: n, rarity: r, img: DB_CHARS[n].img, isNew: isNew });
+                        } 
+                        
+                        inventory.value = currentInventory.sort((a,b) => calcCP(b) - calcCP(a));
+                        currentPullResult.value = results.sort((a,b) => { const v={legendary:3,rare:2,common:1}; return v[b.rarity]-v[a.rarity]; });
+                        
+                        saveData(); 
+                        isAnimating.value = false; 
+                        isPulling.value = false; 
+                        showResults.value = true; 
+                    }, 2500); 
+                };
+
+                const selectStage = (s) => { selectedStage.value=s; battleState.value='prep'; };
+                const openPartySelector = (idx) => { selectedSlotIndex.value=idx; showSelector.value=true; };
+                const closeSelector = () => showSelector.value=false;
+                const selectCharForSlot = (c) => { if(c){ const ex=party.value.findIndex(p=>p&&p.id===c.id); if(ex!==-1&&ex!==selectedSlotIndex.value) party.value[ex]=null; party.value[selectedSlotIndex.value]=JSON.parse(JSON.stringify(c)); } closeSelector(); };
+                const removeFromPartySlot = (idx) => party.value[idx]=null;
+                const isCharInOtherSlot = (id) => party.value.some((p,i)=>p&&p.id===id&&i!==selectedSlotIndex.value);
+                
+                const startBattle = () => {
+                    const active=party.value.filter(p=>p!==null); if(active.length===0)return;
+                    let hpSum=0; party.value.forEach(p=>{if(p){ const s=calcStats(p); p.battleHp=s.hp; p.battleAtk=s.atk; p.currentCd=0; hpSum+=s.hp; }});
+                    maxPartyHp.value=hpSum; partyHp.value=hpSum; 
+                    maxBossHp.value = selectedStage.value.recPower * 20; bossHp.value = maxBossHp.value;
+                    const difficultyRatio = 0.15 + (selectedStage.value.id * 0.015);
+                    currentBossDmg.value = Math.floor(selectedStage.value.recPower * difficultyRatio);
+                    battleTimer.value=60; bossAttackTimer.value=bossAttackInterval; battleState.value='fighting';
+                    let last=performance.now();
+                    gameLoopId = requestAnimationFrame(function loop(t){
+                        if(battleState.value!=='fighting') return;
+                        const dt=(t-last)/1000; last=t;
+                        battleTimer.value-=dt; if(battleTimer.value<=0) { endBattle(false); return; }
+                        party.value.forEach(p=>{if(p&&p.currentCd>0) p.currentCd-=dt;});
+                        bossAttackTimer.value-=dt; if(bossAttackTimer.value<=0) { performBossAttack(); bossAttackTimer.value=bossAttackInterval; }
+                        gameLoopId=requestAnimationFrame(loop);
+                    });
+                };
+
+                const performBossAttack = () => {
+                    isScreenShaking.value = true; isBossAttacking.value = true; 
+                    playSfx('boss_attack');
+                    setTimeout(() => { isScreenShaking.value = false; isBossAttacking.value = false; }, 400); 
+                    const dmg = currentBossDmg.value;
+                    partyHp.value-=dmg; showDmgNum(dmg, window.innerWidth/2, window.innerHeight/2, '#ef4444', '3rem');
+                    if(partyHp.value<=0) endBattle(false);
+                };
+
+                const handleManualClick = () => { 
+                    if(battleState.value!=='fighting')return; 
+                    const power=party.value.reduce((s,c)=>c?s+c.battleAtk:s,0); 
+                    const dmg = Math.max(10, Math.floor(power * 0.10));
+                    hitBoss(dmg, false); 
+                };
+
+                const useSkill = (idx) => {
+                    const p=party.value[idx]; if(!p||p.currentCd>0)return; const s=calcStats(p); p.currentCd=p.cd;
+                    if(p.effectId) { 
+                        playSfx('battle_hit_heavy'); 
+                        showFlash.value = true; setTimeout(() => showFlash.value = false, 100); 
+                        activeFxName.value = null; 
+                        setTimeout(() => { activeFxName.value = p.effectId; }, 20);
+                        setTimeout(() => { if(activeFxName.value === p.effectId) activeFxName.value = null; }, 1500); 
+                    } else { playSfx('battle_hit_light'); }
+                    p.attackAnim = true; setTimeout(() => p.attackAnim = false, 200); 
+                    if(p.skillType==='HEAL'||p.role==='SUP'){ const h=s.atk*4; partyHp.value=Math.min(maxPartyHp.value,partyHp.value+h); showDmgNum(h,200+(idx*100),500,'#4ade80','2rem'); }
+                    else{ let m=3.0; if(p.skillType==='NUKE') m=7; if(p.rarity==='legendary') m*=2.0; hitBoss(Math.floor(s.atk*m),true); }
+                };
+
+                const hitBoss = (dmg, crit) => { 
+                    bossHp.value-=dmg; 
+                    isBossHit.value = true; setTimeout(() => isBossHit.value = false, 150);
+                    showHitImpact.value = true; setTimeout(() => showHitImpact.value = false, 200);
+                    playSfx('boss_hit');
+                    const x=window.innerWidth/2+(Math.random()*150-75); const y=window.innerHeight/2-100+(Math.random()*100); 
+                    showDmgNum(dmg,x,y,crit?'#facc15':'white',crit?'2.5rem':'1.5rem'); 
+                    if(bossHp.value<=0) endBattle(true); 
+                };
+
+                const showDmgNum = (val,x,y,col,size) => { const id=Date.now()+Math.random(); damageNumbers.value.push({id,val,x,y,color:col,size}); setTimeout(()=>damageNumbers.value=damageNumbers.value.filter(d=>d.id!==id),800); };
+                const quitBattle = () => { cancelAnimationFrame(gameLoopId); battleState.value='stages'; activeFxName.value=null; };
+                
+                const endBattle = (win) => { 
+                    cancelAnimationFrame(gameLoopId); battleState.value=win?'won':'lost'; 
+                    if(win){ 
+                        battleReward.value=200+(selectedStage.value.id*100); gems.value+=battleReward.value; 
+                        clearedStages.value.add(selectedStage.value.id);
+                        localStorage.setItem('gacha_cleared', JSON.stringify([...clearedStages.value]));
+                        saveData(); 
+                    } 
+                };
+                
+                const closeResults = () => { showResults.value=false; currentPullResult.value=[]; };
+                const totalAccountPower = computed(()=>inventory.value.reduce((s,c)=>s+calcCP(c),0));
+
+                return {
+                    currentTab, gems, inventory, isPulling, isAnimating, pullGif, showResults, currentPullResult, pull, closeResults,
+                    getLevel, getRarityClass, getStars, getRoleIcon, getXpReq, banners, activeBannerKey, switchBanner, saveData,
+                    totalAccountPower, calcStats, calcCP, inspectedChar, inspectChar: (c)=>inspectedChar.value=c,
+                    stages, selectedStage, selectStage, party, showSelector, selectedSlotIndex, openPartySelector, closeSelector, selectCharForSlot, removeFromPartySlot, isCharInOtherSlot,
+                    battleState, startBattle, bossHp, maxBossHp, partyHp, maxPartyHp, battleTimer, bossScale, activeFxName, isBossHit, isScreenShaking, isBossAttacking, bossAttackInterval, bossAttackTimer,
+                    handleManualClick, useSkill, damageNumbers, battleReward, quitBattle, showHitImpact, showFlash, clearedStages,
+                    isLoading, loadingProgress, loadingText, getPullCost
+                };
+            }
+        }).mount('#app');
+    </script></body></html>
