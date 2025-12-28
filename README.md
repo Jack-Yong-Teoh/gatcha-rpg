@@ -6,7 +6,7 @@
 
 An immersive, high-fidelity browser-based Gacha RPG built with **Vue 3** and **Tailwind CSS**. Experience a modular combat system, real-time elemental VFX, and a deep character progression engine.
 
-**[🎮 Play the Live Demo Here](https://jack-yong-teoh.github.io/astral-gacha/)**
+**[🎮 Play the Live Demo Here](https://jack-yong-teoh.github.io/gatcha-rpg/)**
 
 ---
 
